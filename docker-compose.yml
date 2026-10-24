@@ -1,0 +1,194 @@
+name: smks-nila-harapan
+
+x-backend-common: &backend-common
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  environment: &backend-environment
+    NODE_ENV: ${NODE_ENV:-development}
+    APP_PORT: 3000
+    DB_HOST: db
+    DB_PORT: 3306
+    PRIVATE_STORAGE_DIR: storage/private
+    PUBLIC_UPLOAD_DIR: storage/public-uploads
+    COOKIE_SECURE: ${COOKIE_SECURE:-auto}
+    TRUST_PROXY: "1"
+    INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN in .env}
+    TZ: Asia/Jakarta
+  volumes:
+    - private_storage:/app/storage/private
+    - public_uploads:/app/storage/public-uploads
+  networks: [backend]
+  depends_on:
+    db:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    interval: 20s
+    timeout: 5s
+    retries: 6
+    start_period: 40s
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:?Set DB_NAME in .env}
+      MYSQL_USER: ${DB_USER:?Set DB_USER in .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+      TZ: Asia/Jakarta
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backend]
+
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      APP_PORT: 3000
+      DB_HOST: db
+      DB_PORT: 3306
+      TZ: Asia/Jakarta
+    command: ["sh", "-c", "node backend/src/scripts/migrate.js && node backend/src/scripts/seed.js"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend]
+
+  qr-renderer:
+    build:
+      context: .
+      dockerfile: deploy/qr-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN in .env}
+      TZ: Asia/Jakarta
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  identity-service:
+    <<: *backend-common
+    environment:
+      <<: *backend-environment
+      SERVICE_DOMAIN: identity
+      ENABLE_SCHEDULER: "false"
+
+  cms-service:
+    <<: *backend-common
+    environment:
+      <<: *backend-environment
+      SERVICE_DOMAIN: cms
+      ENABLE_SCHEDULER: "false"
+
+  admissions-service:
+    <<: *backend-common
+    environment:
+      <<: *backend-environment
+      SERVICE_DOMAIN: admissions
+      ENABLE_SCHEDULER: "false"
+
+  academic-service:
+    <<: *backend-common
+    environment:
+      <<: *backend-environment
+      SERVICE_DOMAIN: academic
+      ENABLE_SCHEDULER: "false"
+      QR_SERVICE_URL: http://qr-renderer:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      qr-renderer:
+        condition: service_healthy
+
+  assessment-service:
+    <<: *backend-common
+    environment:
+      <<: *backend-environment
+      SERVICE_DOMAIN: assessments
+      ENABLE_SCHEDULER: "false"
+
+  payroll-service:
+    <<: *backend-common
+    environment:
+      <<: *backend-environment
+      SERVICE_DOMAIN: payroll
+      ENABLE_SCHEDULER: "false"
+
+  administration-service:
+    <<: *backend-common
+    environment:
+      <<: *backend-environment
+      SERVICE_DOMAIN: administration
+      ENABLE_SCHEDULER: "false"
+
+  notification-worker:
+    <<: *backend-common
+    environment:
+      <<: *backend-environment
+      SERVICE_DOMAIN: worker
+      ENABLE_SCHEDULER: "true"
+
+  
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/nginx/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:80"
+    volumes:
+      - ./frontend/public:/usr/share/nginx/html:ro
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/proxy_params:/etc/nginx/proxy_params:ro
+      - public_uploads:/var/lib/nginx/uploads:ro
+    depends_on:
+      identity-service:
+        condition: service_healthy
+      cms-service:
+        condition: service_healthy
+      admissions-service:
+        condition: service_healthy
+      academic-service:
+        condition: service_healthy
+      assessment-service:
+        condition: service_healthy
+      payroll-service:
+        condition: service_healthy
+      administration-service:
+        condition: service_healthy
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/api/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+networks:
+  backend:
+    internal: false
+
+volumes:
+  db_data:
+  private_storage:
+  public_uploads:

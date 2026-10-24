@@ -1,0 +1,8 @@
+node_modules
+.env
+.preview
+storage
+backups
+tests
+*.log
+.git
