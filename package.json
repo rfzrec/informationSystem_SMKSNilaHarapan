@@ -12,7 +12,7 @@
     "start": "node backend/src/server.js",
     "migrate": "node backend/src/scripts/migrate.js",
     "seed": "node backend/src/scripts/seed.js",
-    "test": "node --test --test-concurrency=1 tests/*.test.js"
+    "test": "node --env-file=.env.test --test --test-concurrency=1 tests/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -13,7 +13,7 @@ const EDITABLE_STATUSES = ['draft', 'needs_revision'];
 async function getCurrentPeriod(conn) {
   return one(
     `SELECT * FROM admission_periods WHERE status IN ('active','scheduled')
-     ORDER BY FIELD(status,'active','scheduled'), start_date DESC LIMIT 1`, [], conn,
+     ORDER BY FIELD(status,'active','scheduled'), start_date DESC, id DESC LIMIT 1`, [], conn,
   );
 }
 

@@ -110,24 +110,30 @@ router.post('/teachers',validate(teacherCreateSchema),asyncHandler(async(req,res
 
 router.put('/teachers/:id(\\d+)',validate(z.object({
   full_name:z.string().trim().min(3).max(150),email:z.string().trim().toLowerCase().email().max(190),phone:z.string().trim().max(30).optional().default(''),
+  position_code:z.enum(['guru','kepala_sekolah','kepala_yayasan','staf']).default('guru'),position_name:z.string().trim().max(120).optional().default(''),
   employee_number:z.string().trim().max(40).optional().default(''),nip:z.string().trim().max(40).optional().default(''),nuptk:z.string().trim().max(40).optional().default(''),
-  gender:z.enum(['male','female','unspecified']),birth_date:z.string().trim().optional().default(''),address:z.string().trim().max(500).optional().default(''),
-  education_level:z.string().trim().max(80).optional().default(''),subject_specialization:z.string().trim().max(120).optional().default(''),employment_type:z.enum(['permanent','contract','honorary','other']),hired_on:z.string().trim().optional().default(''),
+  gender:z.enum(['male','female','unspecified']).default('unspecified'),birth_date:z.string().trim().optional().default(''),address:z.string().trim().max(500).optional().default(''),
+  education_level:z.string().trim().max(80).optional().default(''),subject_specialization:z.string().trim().max(120).optional().default(''),employment_type:z.enum(['permanent','contract','honorary','other']).default('other'),hired_on:z.string().trim().optional().default(''),
 })),asyncHandler(async(req,res)=>{
   const id=Number(req.params.id),v=req.valid;
-  const t=await one('SELECT id,user_id,teacher_code FROM teacher_records WHERE id=?',[id]);
-  if(!t) throw new HttpError(404,'Data guru tidak ditemukan. Akun pimpinan dikelola melalui Akun Pengguna.','TEACHER_NOT_FOUND');
-  const emailDup=await one('SELECT id FROM users WHERE email=? AND id<>?',[v.email,t.user_id]);
-  const identityDup=await one(`SELECT id FROM teacher_records WHERE id<>? AND ((?<>'' AND employee_number=?) OR (?<>'' AND nip=?) OR (?<>'' AND nuptk=?)) LIMIT 1`,[id,v.employee_number,v.employee_number,v.nip,v.nip,v.nuptk,v.nuptk]);
+  const employee=await one(`SELECT COALESCE(t.id,u.id) AS id,t.id AS teacher_id,t.teacher_code,u.id AS user_id,u.employee_code,r.code AS role
+    FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id LEFT JOIN teacher_records t ON t.user_id=u.id
+    WHERE COALESCE(t.id,u.id)=? AND u.deleted_at IS NULL AND r.code IN ('guru','school_leader')`,[id]);
+  if(!employee) throw new HttpError(404,'Pegawai tidak ditemukan.','EMPLOYEE_NOT_FOUND');
+  const emailDup=await one('SELECT id FROM users WHERE email=? AND id<>?',[v.email,employee.user_id]);
   if(emailDup) throw new HttpError(409,'Email sudah dipakai akun lain.','EMAIL_TAKEN');
+  const identityDup=employee.teacher_id && await one(`SELECT id FROM teacher_records WHERE id<>? AND ((?<>'' AND employee_number=?) OR (?<>'' AND nip=?) OR (?<>'' AND nuptk=?)) LIMIT 1`,[employee.teacher_id,v.employee_number,v.employee_number,v.nip,v.nip,v.nuptk,v.nuptk]);
   if(identityDup) throw new HttpError(409,'Nomor pegawai, NIP, atau NUPTK sudah digunakan.','TEACHER_IDENTIFIER_TAKEN');
+  const roleCode=v.position_code==='kepala_sekolah'||v.position_code==='kepala_yayasan'?'school_leader':'guru';
+  const rolePrefix=v.position_code==='kepala_sekolah'?'KASEK':v.position_code==='kepala_yayasan'?'KAYAS':v.position_code==='guru'?'GURU':'STAF';
+  const employeeCode=employee.employee_code||`${rolePrefix}-${String(employee.user_id).padStart(6,'0')}`;
   await withTransaction(async(conn)=>{
-    await query('UPDATE users SET email=?,full_name=?,phone=? WHERE id=?',[v.email,v.full_name,v.phone||null,t.user_id],conn);
-    await query(`UPDATE teacher_records SET employee_number=?,nip=?,nuptk=?,full_name=?,gender=?,birth_date=?,address=?,education_level=?,subject_specialization=?,employment_type=?,hired_on=? WHERE id=?`,
-      [v.employee_number||null,v.nip||null,v.nuptk||null,v.full_name,v.gender,v.birth_date||null,v.address||null,v.education_level||null,v.subject_specialization||null,v.employment_type,v.hired_on||null,id],conn);
-    await audit(req,'master.teacher_updated','teacher_record',id,{teacher_code:t.teacher_code,email:v.email},conn);
+    await query('UPDATE users SET email=?,full_name=?,phone=?,position_code=?,position_name=?,employee_code=? WHERE id=?',[v.email,v.full_name,v.phone||null,v.position_code,v.position_name||null,employeeCode,employee.user_id],conn);
+    await query('UPDATE user_roles SET role_id=(SELECT id FROM roles WHERE code=?) WHERE user_id=?',[roleCode,employee.user_id],conn);
+    if(employee.teacher_id) await query(`UPDATE teacher_records SET employee_number=?,nip=?,nuptk=?,full_name=?,gender=?,birth_date=?,address=?,education_level=?,subject_specialization=?,employment_type=?,hired_on=? WHERE id=?`,[v.employee_number||null,v.nip||null,v.nuptk||null,v.full_name,v.gender,v.birth_date||null,v.address||null,v.education_level||null,v.subject_specialization||null,v.employment_type,v.hired_on||null,employee.teacher_id],conn);
+    await audit(req,'master.employee_updated','user',employee.user_id,{employee_code:employeeCode,role:roleCode,position_code:v.position_code},conn);
   });
-  res.json({message:'Data guru diperbarui; kode unik dan relasi akun tetap dipertahankan.'});
+  res.json({message:'Data pegawai, jabatan, role, dan akun login diperbarui. Kode unik tetap dipertahankan.'});
 }));
 
 router.post('/teachers/:id(\\d+)/reset-password', asyncHandler(async (req, res) => {

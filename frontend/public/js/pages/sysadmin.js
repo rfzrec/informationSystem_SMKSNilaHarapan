@@ -208,7 +208,7 @@ export async function teachers(el) {
   const reload = async () => {
     const rows = (await api("/masters/teachers")).data;
     el.innerHTML = `${dashHead("Master Akun Pegawai", "Superadmin mengelola data pegawai, akun login, jabatan, dan role. Kepala Sekolah serta Kepala Yayasan otomatis menjadi Pimpinan Sekolah dengan akses ringkasan baca-saja.", `<button class="btn btn-primary" id="new-teacher">${icon("user-plus")} Tambah Pegawai</button>`)}
-      <div class="table-wrap"><table class="data teacher-table"><colgroup><col class="col-code"><col class="col-teacher"><col class="col-identity"><col class="col-login"><col class="col-assignment"><col class="col-status"><col class="col-actions"></colgroup><thead><tr><th>Kode Pegawai</th><th>Nama Pegawai</th><th>Jabatan</th><th>Login</th><th>Penugasan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td class="mono"><strong>${esc(r.employee_code || r.teacher_code || "—")}</strong></td><td><strong>${esc(r.full_name)}</strong><div class="subtle">${esc(r.role_name || "Pegawai")}</div></td><td>${esc(r.position_name || POSITION_LABELS[r.position_code] || "—")}</td><td>${esc(r.email)}${temporaryPasswords.has(Number(r.id)) ? `<div class="teacher-secret"><span class="teacher-secret-label">Sandi</span><span class="mono teacher-secret-value" data-secret-hidden="true" data-secret-value="${esc(temporaryPasswords.get(Number(r.id)))}">••••••••</span><button type="button" class="icon-btn icon-btn-sm" data-toggle-secret="${Number(r.id)}" aria-label="Tampilkan sandi">${icon("eye")}</button></div>` : ""}</td><td class="assignment-cell"><div class="assignment-summary"><span class="assignment-chip">${icon("briefcase-business")} ${r.assignment_count} penugasan</span><span class="assignment-chip">${icon("school")} ${r.active_homeroom_count} wali kelas</span></div></td><td>${badge("active", Number(r.is_active))}</td><td><div class="teacher-actions"><button class="btn btn-outline btn-sm teacher-edit-btn" data-edit-teacher="${Number(r.id)}" aria-label="Ubah data guru" title="Ubah data guru">${icon("pencil")}</button><button class="btn btn-outline btn-sm" data-reset-teacher="${Number(r.id)}" ${!Number(r.is_active) ? "disabled" : ""}>Reset sandi</button><button class="btn btn-outline btn-sm ${Number(r.is_active) ? "teacher-deactivate-btn" : ""}" data-toggle-teacher="${Number(r.id)}" data-active="${Number(r.is_active)}">${Number(r.is_active) ? "Nonaktifkan" : "Aktifkan"}</button></div></td></tr>`).join("") : `<tr><td colspan="7">${empty("Data guru belum tersedia.")}</td></tr>`}</tbody></table></div>
+      <div class="table-wrap"><table class="data teacher-table"><colgroup><col class="col-code"><col class="col-teacher"><col class="col-identity"><col class="col-login"><col class="col-assignment"><col class="col-status"><col class="col-actions"></colgroup><thead><tr><th>Kode Pegawai</th><th>Nama Pegawai</th><th>Jabatan</th><th>Login</th><th>Penugasan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr><td class="mono"><strong>${esc(r.employee_code || r.teacher_code || "—")}</strong></td><td><strong>${esc(r.full_name)}</strong><div class="subtle">${esc(r.role_name || "Pegawai")}</div></td><td>${esc(r.position_name || POSITION_LABELS[r.position_code] || "—")}</td><td>${esc(r.email)}${temporaryPasswords.has(Number(r.id)) ? `<div class="teacher-secret"><span class="teacher-secret-label">Sandi</span><span class="mono teacher-secret-value" data-secret-hidden="true" data-secret-value="${esc(temporaryPasswords.get(Number(r.id)))}">••••••••</span><button type="button" class="icon-btn icon-btn-sm" data-toggle-secret="${Number(r.id)}" aria-label="Tampilkan sandi">${icon("eye")}</button></div>` : ""}</td><td class="assignment-cell"><div class="assignment-summary"><span class="assignment-chip">${icon("briefcase-business")} ${r.assignment_count} penugasan</span><span class="assignment-chip">${icon("school")} ${r.active_homeroom_count} wali kelas</span></div></td><td>${badge("active", Number(r.is_active))}</td><td><div class="teacher-actions"><button class="btn btn-outline btn-sm teacher-edit-btn" data-edit-teacher="${Number(r.id)}" aria-label="Ubah data pegawai" title="Ubah data pegawai">${icon("pencil")}</button><button class="btn btn-outline btn-sm" data-reset-teacher="${Number(r.id)}" ${!Number(r.is_active) ? "disabled" : ""}>Reset sandi</button><button class="btn btn-outline btn-sm ${Number(r.is_active) ? "teacher-deactivate-btn" : ""}" data-toggle-teacher="${Number(r.id)}" data-active="${Number(r.is_active)}">${Number(r.is_active) ? "Nonaktifkan" : "Aktifkan"}</button></div></td></tr>`).join("") : `<tr><td colspan="7">${empty("Data pegawai belum tersedia.")}</td></tr>`}</tbody></table></div>
       <p class="subtle mt">Kode pegawai mengidentifikasi akun secara unik: KASEK- untuk Kepala Sekolah, KAYAS- untuk Kepala Yayasan, GURU- untuk Guru, dan STAF- untuk Staf.</p>`;
     icons();
     $("#new-teacher", el).onclick = () =>
@@ -241,7 +241,7 @@ export async function teachers(el) {
             hired_on: row.hired_on ? String(row.hired_on).slice(0, 10) : "",
           };
           formDialog({
-            title: `Ubah data guru · ${row.teacher_code}`,
+            title: `Ubah data pegawai · ${row.employee_code || row.teacher_code || "—"}`,
             values,
             fields: teacherFields,
             onSubmit: async (v) => {
@@ -289,9 +289,9 @@ export async function teachers(el) {
           const active = !Number(b.dataset.active);
           if (
             !(await confirmDialog({
-              title: active ? "Aktifkan akun guru?" : "Nonaktifkan akun guru?",
+              title: active ? "Aktifkan akun pegawai?" : "Nonaktifkan akun pegawai?",
               message: active
-                ? "Guru dapat login kembali."
+                ? "Pegawai dapat login kembali."
                 : "Akses login dicabut; data dan penugasan historis tetap tersimpan.",
               danger: !active,
             }))
@@ -314,7 +314,7 @@ export async function teachers(el) {
 }
 
 export async function users(el) {
-  el.innerHTML = `${dashHead("Akun Pengguna", "Akun staf dibuat di sini dengan kata sandi sementara. Pengguna tidak dapat mengubah role sendiri.", `<button class="btn btn-primary" id="new-user" data-testid="user-create-btn">${icon("user-plus")} Akun Baru</button>`)}<div id="tbl"></div>`;
+  el.innerHTML = `${dashHead("Akun Admin", "Subfitur ini hanya untuk akun Superadmin dan Admin Sekolah. Akun Guru serta Pimpinan Sekolah dikelola melalui Master Akun Pegawai.", `<button class="btn btn-primary" id="new-user" data-testid="user-create-btn">${icon("user-plus")} Tambah Akun Admin</button>`)}<div id="tbl"></div>`;
   const showPwd = (title, pwd) =>
     openModal(
       title,
@@ -344,12 +344,12 @@ export async function users(el) {
   });
   $("#new-user", el).onclick = () =>
     formDialog({
-      title: "Akun baru",
+      title: "Tambah akun admin",
       fields: [
         { name: "full_name", label: "Nama lengkap", required: true },
         { name: "email", label: "Email", type: "email", required: true },
         { name: "phone", label: "Telepon" },
-        { name: "position_code", label: "Jabatan", type: "select", required: true, options: [{ value: "superadmin", label: "Superadmin" }, { value: "admin_sekolah", label: "Admin Sekolah" }, ...POSITION_OPTS] },
+        { name: "position_code", label: "Jabatan", type: "select", required: true, options: [{ value: "superadmin", label: "Superadmin" }, { value: "admin_sekolah", label: "Admin Sekolah" }] },
         { name: "position_name", label: "Nama jabatan tambahan" },
         { name: "role", label: "Role", type: "select", required: true, options: ROLE_OPTS },
       ],
